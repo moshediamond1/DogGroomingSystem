@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dog-grooming-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "YourStrong@Passw0rd"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong@Passw0rd -C -Q "SELECT 1" || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - dog-grooming-network
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ./Server
+      dockerfile: DogGrooming/Dockerfile
+    container_name: dog-grooming-server
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ASPNETCORE_URLS: "http://+:5000"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=DogGroomingDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
+    ports:
+      - "5000:5000"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - dog-grooming-network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+    container_name: dog-grooming-client
+    ports:
+      - "3000:80"
+    depends_on:
+      server:
+        condition: service_started
+    networks:
+      - dog-grooming-network
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+
+networks:
+  dog-grooming-network:
+    driver: bridge

@@ -1,10 +1,6 @@
--- Initial Database Setup Script
--- Run this script to create the database and tables
-
 USE master;
 GO
 
--- Create database if it doesn't exist
 IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = 'DogGroomingDB')
 BEGIN
     CREATE DATABASE DogGroomingDB;
@@ -14,7 +10,6 @@ GO
 USE DogGroomingDB;
 GO
 
--- Create Users table
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Users')
 BEGIN
     CREATE TABLE Users (
@@ -27,7 +22,6 @@ BEGIN
 END
 GO
 
--- Create Appointments table
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Appointments')
 BEGIN
     CREATE TABLE Appointments (

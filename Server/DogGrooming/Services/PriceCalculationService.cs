@@ -16,7 +16,6 @@ public class PriceCalculationService : IPriceCalculationService
     public (int duration, decimal price, decimal finalPrice, bool discountApplied) CalculatePrice(
         DogSize dogSize, int userId)
     {
-        // Define pricing based on dog size
         var (duration, basePrice) = dogSize switch
         {
             DogSize.Small => (30, 100m),
@@ -25,7 +24,6 @@ public class PriceCalculationService : IPriceCalculationService
             _ => throw new ArgumentException("Invalid dog size")
         };
 
-        // Check if user has more than 3 previous appointments
         var appointmentCount = _context.Appointments
             .Count(a => a.UserId == userId && a.AppointmentTime < DateTime.UtcNow);
 

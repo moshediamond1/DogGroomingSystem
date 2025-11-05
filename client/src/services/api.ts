@@ -39,6 +39,16 @@ export const authService = {
     return data;
   },
 
+  async validateToken(): Promise<User | null> {
+    try {
+      const { data } = await api.get<User>("/auth/validate");
+      return data;
+    } catch (error) {
+      localStorage.removeItem("token");
+      return null;
+    }
+  },
+
   logout() {
     localStorage.removeItem("token");
   },

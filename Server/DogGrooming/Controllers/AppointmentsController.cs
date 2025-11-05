@@ -31,6 +31,32 @@ public class AppointmentsController : ControllerBase
         return int.Parse(userIdClaim!);
     }
 
+    private async Task<bool> HasOverlappingAppointmentsAsync(
+        DateTime appointmentTime,
+        int durationMinutes,
+        int? excludeAppointmentId = null)
+    {
+        var requestedStart = appointmentTime;
+        var requestedEnd = appointmentTime.AddMinutes(durationMinutes);
+
+        // Use UPDLOCK to lock the rows being checked, preventing concurrent modifications
+        var overlappingCount = await _context.Appointments
+            .FromSqlRaw(@"
+                SELECT * FROM Appointments WITH (UPDLOCK, HOLDLOCK)
+                WHERE (@excludeId IS NULL OR Id != @excludeId)
+                AND (
+                    (@start >= AppointmentTime AND @start < DATEADD(MINUTE, DurationMinutes, AppointmentTime))
+                    OR (@end > AppointmentTime AND @end <= DATEADD(MINUTE, DurationMinutes, AppointmentTime))
+                    OR (@start <= AppointmentTime AND @end >= DATEADD(MINUTE, DurationMinutes, AppointmentTime))
+                )",
+                new Microsoft.Data.SqlClient.SqlParameter("@start", requestedStart),
+                new Microsoft.Data.SqlClient.SqlParameter("@end", requestedEnd),
+                new Microsoft.Data.SqlClient.SqlParameter("@excludeId", (object?)excludeAppointmentId ?? DBNull.Value))
+            .CountAsync();
+
+        return overlappingCount > 0;
+    }
+
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AppointmentDto>>> GetAppointments(
         [FromQuery] DateTime? startDate,
@@ -108,103 +134,148 @@ public class AppointmentsController : ControllerBase
     {
         var userId = GetUserId();
 
-        // Calculate price with discount
-        var (duration, price, finalPrice, discountApplied) = 
-            _priceService.CalculatePrice(dto.DogSize, userId);
+        // Use transaction with serializable isolation level to prevent race conditions
+        using var transaction = await _context.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable);
 
-        var appointment = new Appointment
+        try
         {
-            UserId = userId,
-            AppointmentTime = dto.AppointmentTime,
-            DogSize = dto.DogSize,
-            DurationMinutes = duration,
-            Price = price,
-            FinalPrice = finalPrice,
-            DiscountApplied = discountApplied,
-            CreatedAt = DateTime.UtcNow
-        };
+            var (duration, price, finalPrice, discountApplied) =
+                _priceService.CalculatePrice(dto.DogSize, userId);
 
-        _context.Appointments.Add(appointment);
-        await _context.SaveChangesAsync();
-
-        // Reload with user data
-        await _context.Entry(appointment).Reference(a => a.User).LoadAsync();
-
-        return CreatedAtAction(nameof(GetAppointment), new { id = appointment.Id }, 
-            new AppointmentDto
+            // Check for overlapping appointments with row-level locking
+            if (await HasOverlappingAppointmentsAsync(dto.AppointmentTime, duration))
             {
-                Id = appointment.Id,
-                UserId = appointment.UserId,
-                CustomerName = appointment.User.FirstName,
-                AppointmentTime = appointment.AppointmentTime,
-                DogSize = appointment.DogSize.ToString(),
-                DurationMinutes = appointment.DurationMinutes,
-                Price = appointment.Price,
-                FinalPrice = appointment.FinalPrice,
-                DiscountApplied = appointment.DiscountApplied,
-                CreatedAt = appointment.CreatedAt
-            });
+                return Conflict(new { message = "This time slot is already booked. Please choose another time." });
+            }
+
+            var appointment = new Appointment
+            {
+                UserId = userId,
+                AppointmentTime = dto.AppointmentTime,
+                DogSize = dto.DogSize,
+                DurationMinutes = duration,
+                Price = price,
+                FinalPrice = finalPrice,
+                DiscountApplied = discountApplied,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Appointments.Add(appointment);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            await _context.Entry(appointment).Reference(a => a.User).LoadAsync();
+
+            return CreatedAtAction(nameof(GetAppointment), new { id = appointment.Id },
+                new AppointmentDto
+                {
+                    Id = appointment.Id,
+                    UserId = appointment.UserId,
+                    CustomerName = appointment.User.FirstName,
+                    AppointmentTime = appointment.AppointmentTime,
+                    DogSize = appointment.DogSize.ToString(),
+                    DurationMinutes = appointment.DurationMinutes,
+                    Price = appointment.Price,
+                    FinalPrice = appointment.FinalPrice,
+                    DiscountApplied = appointment.DiscountApplied,
+                    CreatedAt = appointment.CreatedAt
+                });
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAppointment(int id, UpdateAppointmentDto dto)
     {
         var userId = GetUserId();
-        var appointment = await _context.Appointments.FindAsync(id);
 
-        if (appointment == null)
+        // Use transaction with serializable isolation level to prevent race conditions
+        using var transaction = await _context.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable);
+
+        try
         {
-            return NotFound(new { message = "Appointment not found" });
-        }
+            var appointment = await _context.Appointments.FindAsync(id);
 
-        // Check if user owns this appointment
-        if (appointment.UserId != userId)
+            if (appointment == null)
+            {
+                return NotFound(new { message = "Appointment not found" });
+            }
+
+            if (appointment.UserId != userId)
+            {
+                return Forbid();
+            }
+
+            var (duration, price, finalPrice, discountApplied) =
+                _priceService.CalculatePrice(dto.DogSize, userId);
+
+            // Check for overlapping appointments (excluding the current appointment)
+            if (await HasOverlappingAppointmentsAsync(dto.AppointmentTime, duration, id))
+            {
+                return Conflict(new { message = "This time slot is already booked. Please choose another time." });
+            }
+
+            appointment.AppointmentTime = dto.AppointmentTime;
+            appointment.DogSize = dto.DogSize;
+            appointment.DurationMinutes = duration;
+            appointment.Price = price;
+            appointment.FinalPrice = finalPrice;
+            appointment.DiscountApplied = discountApplied;
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return NoContent();
+        }
+        catch
         {
-            return Forbid();
+            await transaction.RollbackAsync();
+            throw;
         }
-
-        // Recalculate price with potential discount
-        var (duration, price, finalPrice, discountApplied) = 
-            _priceService.CalculatePrice(dto.DogSize, userId);
-
-        appointment.AppointmentTime = dto.AppointmentTime;
-        appointment.DogSize = dto.DogSize;
-        appointment.DurationMinutes = duration;
-        appointment.Price = price;
-        appointment.FinalPrice = finalPrice;
-        appointment.DiscountApplied = discountApplied;
-
-        await _context.SaveChangesAsync();
-
-        return NoContent();
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAppointment(int id)
     {
         var userId = GetUserId();
-        var appointment = await _context.Appointments.FindAsync(id);
 
-        if (appointment == null)
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
         {
-            return NotFound(new { message = "Appointment not found" });
-        }
+            var appointment = await _context.Appointments.FindAsync(id);
 
-        // Check if user owns this appointment
-        if (appointment.UserId != userId)
+            if (appointment == null)
+            {
+                return NotFound(new { message = "Appointment not found" });
+            }
+
+            if (appointment.UserId != userId)
+            {
+                return Forbid();
+            }
+
+            if (appointment.AppointmentTime.Date == DateTime.Today)
+            {
+                return BadRequest(new { message = "Cannot delete appointments scheduled for today" });
+            }
+
+            _context.Appointments.Remove(appointment);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return NoContent();
+        }
+        catch
         {
-            return Forbid();
+            await transaction.RollbackAsync();
+            throw;
         }
-
-        // Check if appointment is for today
-        if (appointment.AppointmentTime.Date == DateTime.Today)
-        {
-            return BadRequest(new { message = "Cannot delete appointments scheduled for today" });
-        }
-
-        _context.Appointments.Remove(appointment);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
     }
 }

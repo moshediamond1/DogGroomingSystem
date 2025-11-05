@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using DogGroomingAPI.Data;
 using DogGroomingAPI.DTOs;
 using DogGroomingAPI.Models;
 using DogGroomingAPI.Services;
+using System.Security.Claims;
 
 namespace DogGroomingAPI.Controllers;
 
@@ -23,16 +25,13 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto registerDto)
     {
-        // Check if username already exists
         if (await _context.Users.AnyAsync(u => u.Username == registerDto.Username))
         {
             return BadRequest(new { message = "Username already exists" });
         }
 
-        // Hash password
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password);
 
-        // Create new user
         var user = new User
         {
             Username = registerDto.Username,
@@ -44,7 +43,6 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        // Generate token
         var token = _jwtService.GenerateToken(user);
 
         return Ok(new AuthResponseDto
@@ -59,7 +57,6 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto loginDto)
     {
-        // Find user
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == loginDto.Username);
 
@@ -68,14 +65,41 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
-        // Verify password
         if (!BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash))
         {
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
-        // Generate token
         var token = _jwtService.GenerateToken(user);
+
+        return Ok(new AuthResponseDto
+        {
+            Token = token,
+            Username = user.Username,
+            FirstName = user.FirstName,
+            UserId = user.Id
+        });
+    }
+
+    [HttpGet("validate")]
+    [Authorize]
+    public async Task<ActionResult<AuthResponseDto>> ValidateToken()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+        {
+            return Unauthorized(new { message = "Invalid token" });
+        }
+
+        var user = await _context.Users.FindAsync(userId);
+
+        if (user == null)
+        {
+            return Unauthorized(new { message = "User not found" });
+        }
+
+        var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
 
         return Ok(new AuthResponseDto
         {
