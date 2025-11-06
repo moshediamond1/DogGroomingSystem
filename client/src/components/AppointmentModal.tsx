@@ -1,7 +1,7 @@
-import { useState, FormEvent } from 'react';
-import { appointmentService } from '../services/api';
-import { DogSize } from '../types';
-import type { Appointment } from '../types';
+import { useState, FormEvent } from "react";
+import { appointmentService } from "../services/api";
+import { DogSize } from "../types";
+import type { Appointment } from "../types";
 
 interface Props {
   appointment: Appointment | null;
@@ -10,32 +10,36 @@ interface Props {
 
 export default function AppointmentModal({ appointment, onClose }: Props) {
   const [appointmentTime, setAppointmentTime] = useState(
-    appointment ? appointment.appointmentTime.slice(0, 16) : ''
+    appointment ? appointment.appointmentTime.slice(0, 16) : ""
   );
   const [dogSize, setDogSize] = useState<DogSize>(
     appointment ? getDogSizeEnum(appointment.dogSize) : DogSize.Small
   );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   function getDogSizeEnum(size: string): DogSize {
     switch (size) {
-      case 'Small': return DogSize.Small;
-      case 'Medium': return DogSize.Medium;
-      case 'Large': return DogSize.Large;
-      default: return DogSize.Small;
+      case "Small":
+        return DogSize.Small;
+      case "Medium":
+        return DogSize.Medium;
+      case "Large":
+        return DogSize.Large;
+      default:
+        return DogSize.Small;
     }
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
       const data = {
-        appointmentTime: new Date(appointmentTime).toISOString(),
-        dogSize
+        appointmentTime: appointmentTime,
+        dogSize,
       };
 
       if (appointment) {
@@ -45,7 +49,7 @@ export default function AppointmentModal({ appointment, onClose }: Props) {
       }
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to save appointment');
+      setError(err.response?.data?.message || "Failed to save appointment");
     } finally {
       setLoading(false);
     }
@@ -55,8 +59,10 @@ export default function AppointmentModal({ appointment, onClose }: Props) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{appointment ? 'Edit Appointment' : 'New Appointment'}</h2>
-          <button onClick={onClose} className="close-btn">&times;</button>
+          <h2>{appointment ? "Edit Appointment" : "New Appointment"}</h2>
+          <button onClick={onClose} className="close-btn">
+            &times;
+          </button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -89,11 +95,20 @@ export default function AppointmentModal({ appointment, onClose }: Props) {
           {error && <div className="error-message">{error}</div>}
 
           <div className="modal-actions">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={loading}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary"
+              disabled={loading}
+            >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Saving...' : 'Save'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading}
+            >
+              {loading ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
