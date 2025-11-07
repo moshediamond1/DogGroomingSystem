@@ -1,140 +1,109 @@
 # Dog Grooming Appointment System
 
-A full-stack appointment booking system for dog grooming services with features including user authentication, appointment scheduling with conflict prevention, dynamic pricing with loyalty discounts, and real-time availability checking.
+Full-stack appointment booking system for dog grooming services.
 
 ## Tech Stack
 
-**Frontend:** React + TypeScript + Vite
-**Backend:** .NET 8.0 Web API + Entity Framework Core
-**Database:** SQL Server 2022
-**Containerization:** Docker + Docker Compose
+- **Frontend:** React + TypeScript + Vite
+- **Backend:** .NET 8.0 Web API + Entity Framework Core
+- **Database:** SQL Server 2022
+- **Containerization:** Docker + Docker Compose
 
 ## Features
 
-- User registration and JWT authentication
-- Create, view, update, and delete appointments
-- Automatic pricing based on dog size (Small/Medium/Large)
-- 10% loyalty discount after 3+ completed appointments
-- Concurrent booking prevention with transaction locking
-- Real-time appointment conflict detection
+- JWT authentication & user registration
+- Book, view, update, and delete appointments
+- Automatic pricing by dog size (Small: ₪100, Medium: ₪150, Large: ₪200)
+- 10% loyalty discount after 3+ appointments
+- Real-time conflict detection prevents double-bookings
+- Transaction-based locking for concurrent users
 
 ## Quick Start with Docker (Recommended)
 
 ### Prerequisites
+
 - Docker Desktop installed and running
 
-### Run Everything
+### Start the Application
 
-**Windows:**
-```bash
-start.bat
-```
-
-**Mac/Linux:**
-```bash
-bash start.sh
-```
-
-Or manually:
 ```bash
 docker-compose up -d
 ```
 
-The app will automatically:
-1. Start SQL Server with health checks
-2. Build and run the .NET API server
-3. Build and run the React client
-4. Open http://localhost:3000 in your browser
+Automatically starts:
 
-### Access Points
-- **Client (Frontend):** http://localhost:3000
-- **API (Backend):** http://localhost:5000
-- **SQL Server:** localhost:1433 (sa / YourStrong@Passw0rd)
+1. SQL Server (with health checks)
+2. .NET API server
+3. React client
 
-### Docker Commands
+**Access:**
+
+- **Frontend:** http://localhost:3000
+- **API:** http://localhost:5000
+- **Database:** localhost:1433 (sa / YourStrong@Passw0rd)
+
+### Useful Commands
+
 ```bash
-# View logs
-docker-compose logs -f
-
-# Stop all services
-docker-compose down
-
-# Stop and remove database (fresh start)
-docker-compose down -v
-
-# Rebuild containers
-docker-compose up -d --build
+docker-compose logs -f              # View logs
+docker-compose down                 # Stop all
+docker-compose down -v              # Stop and delete database
+docker-compose up -d --build        # Rebuild
 ```
 
 ## Manual Setup (Without Docker)
 
-### Prerequisites
-- Node.js 18+ and npm
-- .NET 8.0 SDK
-- SQL Server (LocalDB or SQL Server Express)
+**Prerequisites:** Node.js 18+, .NET 8.0 SDK, SQL Server
 
-### Backend Setup
-1. Start SQL Server (LocalDB or SQL Server Express)
-2. Update connection string in `Server/DogGrooming/appsettings.json` if needed
+### Backend
 
 ```bash
 cd Server/DogGrooming
-
-# Restore dependencies
 dotnet restore
-
-# Update connection string in appsettings.json if needed
-# Run the API
-dotnet run
+dotnet run                          # Runs on http://localhost:5000
 ```
 
-API will run on: http://localhost:5000
+Update connection string in `appsettings.json` if needed.
 
-### Frontend Setup
+### Frontend
+
 ```bash
 cd client
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
+npm run dev                         # Runs on http://localhost:3000
 ```
-
-Client will run on: http://localhost:3000
 
 ## Project Structure
 
 ```
 HomeAssignment-Swish/
-├── client/                 # React frontend
+├── client/                 # React frontend (TypeScript + Vite)
 │   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── context/       # Auth context
+│   │   ├── components/    # UI components
 │   │   ├── pages/         # Page components
-│   │   ├── services/      # API service layer
-│   │   └── types/         # TypeScript types
+│   │   ├── services/      # API calls
+│   │   └── context/       # Auth context
 │   └── Dockerfile
-├── Server/
-│   └── DogGrooming/       # .NET API
-│       ├── Controllers/   # API endpoints
-│       ├── Services/      # Business logic
-│       ├── Models/        # Data models
-│       ├── Data/          # DbContext
-│       └── Dockerfile
-├── docker-compose.yml
-├── start.bat              # Windows startup script
-└── start.sh               # Mac/Linux startup script
+├── Server/DogGrooming/    # .NET 8 API
+│   ├── Controllers/       # API endpoints
+│   ├── Services/          # Business logic
+│   ├── Models/            # Data models
+│   ├── DTOs/              # Data transfer objects
+│   ├── Data/              # DbContext
+│   └── Dockerfile
+└── docker-compose.yml
 ```
 
 ## API Endpoints
 
 ### Authentication
+
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login user
 - `GET /api/auth/validate` - Validate JWT token
 
 ### Appointments
+
 - `GET /api/appointments` - Get all appointments (with filters)
 - `GET /api/appointments/{id}` - Get appointment by ID
 - `POST /api/appointments` - Create new appointment
@@ -146,36 +115,38 @@ All appointment endpoints require JWT authentication via `Authorization: Bearer 
 ## Pricing
 
 | Dog Size | Duration | Base Price | With Discount (3+ bookings) |
-|----------|----------|------------|----------------------------|
-| Small    | 30 min   | ₪100       | ₪90                        |
-| Medium   | 45 min   | ₪150       | ₪135                       |
-| Large    | 60 min   | ₪200       | ₪180                       |
+| -------- | -------- | ---------- | --------------------------- |
+| Small    | 30 min   | ₪100       | ₪90                         |
+| Medium   | 45 min   | ₪150       | ₪135                        |
+| Large    | 60 min   | ₪200       | ₪180                        |
 
 ## Development Notes
 
-- Database schema, views, and stored procedures are auto-created on app startup via `Program.cs`
-- SQL Server uses pessimistic locking (UPDLOCK, HOLDLOCK) to prevent double-bookings
-- Appointments use SERIALIZABLE transaction isolation for race condition prevention
-- JWT tokens expire after 24 hours
-- Appointments scheduled for today cannot be deleted
-- The system uses SQL view (`vw_AppointmentDetails`) for optimized appointment queries
-- The system uses stored procedure (`sp_CheckAppointmentOverlap`) for conflict detection
+- **Database:** Auto-created on startup with EF Core
+- **Database Objects:** View (`vw_AppointmentsWithUsers`) and stored procedure (`sp_CheckOverlappingAppointments`) created automatically in C# code
+- **Concurrency:** SERIALIZABLE transaction isolation prevents race conditions
+- **JWT:** Tokens expire after 24 hours
+- **Deletion:** Appointments scheduled for today cannot be deleted
+- **Pricing:** Calculated server-side based on user's appointment history
 
 ## Troubleshooting
 
-**SQL Server container fails to start:**
-- Increase Docker memory to at least 4GB
-- Wait 60 seconds for SQL Server to fully initialize
+**SQL Server won't start:**
+
+- Increase Docker memory to 4GB+
+- Wait 60s for initialization
 - Check logs: `docker-compose logs sqlserver`
 
-**Port already in use:**
-- Client (3000): Stop other apps using port 3000
-- Server (5000): Stop other .NET apps or IIS
-- SQL (1433): Stop local SQL Server instances
+**Port conflicts:**
 
-**Database connection errors:**
-- Ensure SQL Server container is healthy: `docker ps`
-- Verify connection string in docker-compose.yml matches appsettings
+- Port 3000: Stop other apps
+- Port 5000: Stop .NET/IIS apps
+- Port 1433: Stop local SQL Server
+
+**Connection errors:**
+
+- Check container health: `docker ps`
+- Verify connection string matches docker-compose.yml
 
 ## License
 
