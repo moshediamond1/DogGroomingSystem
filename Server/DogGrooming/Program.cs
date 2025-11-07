@@ -34,6 +34,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IPriceCalculationService, PriceCalculationService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<IDatabaseInitializationService, DatabaseInitializationService>();
 
 builder.Services.AddCors(options =>
 {
@@ -46,8 +47,8 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    context.Database.EnsureCreated();
+    var dbInitializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializationService>();
+    await dbInitializer.InitializeDatabaseAsync();
 }
 app.UseCors("AllowAll");
 app.UseAuthentication();

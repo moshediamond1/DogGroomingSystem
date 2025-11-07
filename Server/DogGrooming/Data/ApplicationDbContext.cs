@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using DogGroomingAPI.Models;
+using DogGroomingAPI.DTOs;
 
 namespace DogGroomingAPI.Data;
 
@@ -12,6 +13,7 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<Appointment> Appointments { get; set; }
+    public DbSet<AppointmentViewDto> AppointmentsView { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,12 @@ public class ApplicationDbContext : DbContext
                 .WithMany(u => u.Appointments)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppointmentViewDto>(entity =>
+        {
+            entity.HasNoKey();
+            entity.ToView("vw_AppointmentsWithUsers");
         });
     }
 }

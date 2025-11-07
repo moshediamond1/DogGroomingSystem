@@ -21,8 +21,7 @@ public class AppointmentService : IAppointmentService
         DateTime? endDate,
         string? customerName)
     {
-        var query = _context.Appointments
-            .Include(a => a.User)
+        var query = _context.AppointmentsView
             .AsQueryable();
 
         if (startDate.HasValue)
@@ -32,11 +31,11 @@ public class AppointmentService : IAppointmentService
             query = query.Where(a => a.AppointmentTime <= endDate.Value);
 
         if (!string.IsNullOrWhiteSpace(customerName))
-            query = query.Where(a => a.User.FirstName.Contains(customerName));
+            query = query.Where(a => a.CustomerName.Contains(customerName));
 
         var appointments = await query
             .OrderBy(a => a.AppointmentTime)
-            .Select(a => MapToDto(a))
+            .Select(a => MapViewToDto(a))
             .ToListAsync();
 
         return appointments;
@@ -44,11 +43,10 @@ public class AppointmentService : IAppointmentService
 
     public async Task<AppointmentDto?> GetAppointmentByIdAsync(int id)
     {
-        var appointment = await _context.Appointments
-            .Include(a => a.User)
+        var appointment = await _context.AppointmentsView
             .FirstOrDefaultAsync(a => a.Id == id);
 
-        return appointment == null ? null : MapToDto(appointment);
+        return appointment == null ? null : MapViewToDto(appointment);
     }
 
     public async Task<AppointmentDto> CreateAppointmentAsync(CreateAppointmentDto dto, int userId)
@@ -167,24 +165,14 @@ public class AppointmentService : IAppointmentService
         int durationMinutes,
         int? excludeAppointmentId = null)
     {
-        var endTime = appointmentTime.AddMinutes(durationMinutes);
+        var result = await _context.Database.SqlQueryRaw<int>(
+            "EXEC sp_CheckOverlappingAppointments @p0, @p1, @p2",
+            appointmentTime,
+            durationMinutes,
+            excludeAppointmentId ?? (object)DBNull.Value
+        ).ToListAsync();
 
-        var hasOverlap = await _context.Appointments
-            .FromSqlRaw(@"
-                SELECT TOP 1 *
-                FROM Appointments WITH (UPDLOCK, HOLDLOCK)
-                WHERE (@excludeId IS NULL OR Id != @excludeId)
-                AND (
-                    (@startTime >= AppointmentTime AND @startTime < DATEADD(MINUTE, DurationMinutes, AppointmentTime))
-                    OR (@endTime > AppointmentTime AND @endTime <= DATEADD(MINUTE, DurationMinutes, AppointmentTime))
-                    OR (@startTime <= AppointmentTime AND @endTime >= DATEADD(MINUTE, DurationMinutes, AppointmentTime))
-                )",
-                new Microsoft.Data.SqlClient.SqlParameter("@startTime", appointmentTime),
-                new Microsoft.Data.SqlClient.SqlParameter("@endTime", endTime),
-                new Microsoft.Data.SqlClient.SqlParameter("@excludeId", (object?)excludeAppointmentId ?? DBNull.Value))
-            .AnyAsync();
-
-        return hasOverlap;
+        return result.FirstOrDefault() == 1;
     }
 
     private static AppointmentDto MapToDto(Appointment appointment)
@@ -201,6 +189,23 @@ public class AppointmentService : IAppointmentService
             FinalPrice = appointment.FinalPrice,
             DiscountApplied = appointment.DiscountApplied,
             CreatedAt = appointment.CreatedAt
+        };
+    }
+
+    private static AppointmentDto MapViewToDto(dynamic viewModel)
+    {
+        return new AppointmentDto
+        {
+            Id = viewModel.Id,
+            UserId = viewModel.UserId,
+            CustomerName = viewModel.CustomerName,
+            AppointmentTime = viewModel.AppointmentTime,
+            DogSize = viewModel.DogSize.ToString(),
+            DurationMinutes = viewModel.DurationMinutes,
+            Price = viewModel.Price,
+            FinalPrice = viewModel.FinalPrice,
+            DiscountApplied = viewModel.DiscountApplied,
+            CreatedAt = viewModel.CreatedAt
         };
     }
 }

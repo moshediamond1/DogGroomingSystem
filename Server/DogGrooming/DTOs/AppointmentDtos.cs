@@ -34,3 +34,17 @@ public class AppointmentFilterDto
     public DateTime? EndDate { get; set; }
     public string? CustomerName { get; set; }
 }
+
+public class AppointmentViewDto
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public DateTime AppointmentTime { get; set; }
+    public int DogSize { get; set; }
+    public int DurationMinutes { get; set; }
+    public decimal Price { get; set; }
+    public decimal FinalPrice { get; set; }
+    public bool DiscountApplied { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+}
